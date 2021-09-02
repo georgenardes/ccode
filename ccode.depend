@@ -1,7 +1,9 @@
 # depslib dependency file v1.0
-1630437641 source:c:\users\user\desktop\projeto_tcc\crq_network\ccode\main.c
+1630613589 source:c:\users\user\desktop\projeto_tcc\crq_network\ccode\main.c
 	<stdio.h>
 	<stdlib.h>
+	<math.h>
+	<assert.h>
 	"C:\workspace\vcpkg\installed\x64-windows\include\stb_image.h"
 	"C:\workspace\vcpkg\installed\x64-windows\include\stb_image_write.h"
 	"C:\workspace\vcpkg\installed\x64-windows\include\stb_image_resize.h"

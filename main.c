@@ -162,7 +162,9 @@ void weight_reader(const char* file_path, Network * network){
 
 }
 
-
+// x colunas
+// y linhas
+// c canais
 int get_pixel (Image im, int x, int y, int c){
 
     if(x >= im.w) return 0;
@@ -173,8 +175,7 @@ int get_pixel (Image im, int x, int y, int c){
     assert(c >= 0);
     assert(c < im.c);
 
-    int o_index = (x*im.h*im.c) + (y*im.c) + c;
-    return im.data[o_index];
+    return im.data[(y*im.w*im.c) + (x*im.c) + c];
 }
 
 void set_pixel (Image im, int x, int y, int c, int val){
@@ -182,11 +183,16 @@ void set_pixel (Image im, int x, int y, int c, int val){
     assert(c < im.c);
 
     if(x >= 0 && x < im.w && y >= 0 && y < im.h){
-        int o_index = (x*im.h*im.c) + (y*im.c) + c;
-        im.data[o_index] = val;
+        im.data[(y*im.w*im.c) + (x*im.c) + c] = val;
     } else {
         printf("index out of range\n");
     }
+}
+
+
+int get_weight(Layer_t l, int m, int x, int y, int c){
+    // return l.weights[(m*l.H*l.W*l.C)+(h*l.W*l.C)+(w*l.C)+ k];
+    return l.weights[(m*l.H*l.W*l.C)+(y*l.W*l.C)+(x*l.C)+ c];
 }
 
 
@@ -210,23 +216,47 @@ Image forward_conv (Layer_t l, Image input){
     int w_index = 0;
 
     for(int m = 0; m < out.c; m++){                     // # filters (or output channels)
-        for (int x = 0; x < out.w; x++){                // colunas Ofmap
-            for (int y = 0; y < out.h; y++){            // linhas Ofmap
+        for (int y = 0; y < out.h; y++){                // linhas Ofmap
+            for (int x = 0; x < out.w; x++){            // colunas Ofmap
+                // printf("pixel de saida %d %d \n", x, y);
                 int conv_o = 0;
                 for(int h = 0; h < l.H; h++){           // linhas kernel
                     for(int w = 0; w < l.W; w++){       // colunas kernel
                         for(int k = 0; k < l.C; k++){   // canais kernel (or input chanel)
-                            w_index = (m*l.H*l.W*l.C)+(h*l.W*l.C)+(w*l.C)+ k;
-                            // printf("%d * %d;", l.weights[w_index],get_pixel(input, x+w-1, y+h-1, k));
-                            int ix = x+w-l.padding;
-                            int iy = y+h-l.padding;
-                            conv_o += get_pixel(input, x+w-l.padding, y+h-l.padding, k) * l.weights[w_index];
+                            int pixel = get_pixel(input, x+w-l.padding, y+h-l.padding, k);
+                            int peso = get_weight(l, m, w, h, k);
+
+                            // printf("%d*%d; \n", pixel, peso);
+                            conv_o += pixel * peso;
                         }
                     }
+                    // printf("\n");
                 }
-                int o = conv_o + l.bias[m]; // add bias
-                o = (o < 0) ? 0 : o;        // RELU
-                set_pixel(out, x, y, m, (char)o);
+                // printf("\n");
+                /**
+                    Provavelmente aqui teria que ser
+                    aplicado "scale down" e "cast down"
+                    como a especificação do comenta.
+
+                    With the final value of the int32 accumulator,
+                    there remain three things left to do: scale down
+                    to the final scale used by the 8-bit output
+                    activations, cast down to uint8 and apply the
+                    activation function to yield the final 8-bit
+                    output activation.
+
+                    The down-scaling corresponds to multiplication
+                    by the multiplier M in equation (7). As explained
+                    in section 2.2, it is implemented as a
+                    fixed-point multiplication by a normalized
+                    multiplier M0 and a rounding bit-shift.
+                    Afterwards, we perform a saturating cast to uint8,
+                    saturating to the range [0, 255].
+
+                */
+                int o = (char)(conv_o + l.bias[m]); // add bias
+                o = (o < 0) ? 0 : o;                // RELU
+                set_pixel(out, x, y, m, o);
             }
         }
     }
@@ -236,7 +266,6 @@ Image forward_conv (Layer_t l, Image input){
 }
 
 Image forward_pool (Layer_t l, Image input){
-    // calcular dimensões da imagem de saída
     Image out;
     out.c = input.c;    // # filters
     out.w = input.w / 2;
@@ -324,14 +353,11 @@ float * softmax(int* input, int size) {
 	return result;
 }
 
-
-
 int * forward_propagation (Network net, Image input_tensor){
-    int * output_tensor;
-
     Image fmap = input_tensor;
     int * out_flatten;
     int * out_fc;
+    int * output_tensor;
 
     for (int i = 0; i < net.num_layers; i++){
         Layer_t l = net.layers[i];
@@ -353,11 +379,10 @@ int * forward_propagation (Network net, Image input_tensor){
 }
 
 
-int main()
+int main_()
 {
     Network net;
     net.num_layers = LAYERS;
-    // net.layers = (Layer_t*) malloc(sizeof(Layer_t) * LAYERS);
 
     // leitura dos pesos
     weight_reader("../pesos_1.txt", &net);
@@ -366,7 +391,8 @@ int main()
     }
 
     Image input_image;
-    unsigned char * stb_image = stbi_load("A_21472.png", &input_image.w, &input_image.h, &input_image.c, 3);
+    // unsigned char * stb_image = stbi_load("A_21472.png", &input_image.w, &input_image.h, &input_image.c, 3);
+    unsigned char * stb_image = stbi_load("Y_74978.png", &input_image.w, &input_image.h, &input_image.c, 3);
     input_image.c = 3;
     if(input_image.w != 24 || input_image.h != 32){
         printf("Incorrect image size!");
@@ -377,43 +403,119 @@ int main()
     input_image.data = (int *) calloc (input_image.w * input_image.h * input_image.c, sizeof(int));
 
     // converte para int32
-    for (int x = 0; x < input_image.w; x++){
-        for (int y = 0; y < input_image.h; y++){
+    // printf("[");
+    for (int y = 0; y < input_image.h; y++){
+        // printf("[");
+            for (int x = 0; x < input_image.w; x++){
+            // printf("[");
             for (int c = 0; c < input_image.c; c++){
-                set_pixel(input_image, x, y, c, (int) stb_image[(x*input_image.h*input_image.c)+(y*input_image.c)+c]);
-                // set_pixel(input_image, x, y, c, 255);
-                // stb_image[(x*input_image.h*input_image.c)+(y*input_image.c)+c] = (unsigned char) get_pixel(input_image, x, y, c);
+                int index = (y*input_image.w*input_image.c) + (x*input_image.c) + c;
+                set_pixel(input_image, x, y, c, (int) stb_image[index]);
+                // set_pixel(input_image, x, y, c, 1);
+                // stb_image[index] = (unsigned char) get_pixel(input_image, x, y, c);
+
+                // printf("%d ", (int)stb_image[index]);
             }
+            // printf("]\n");
         }
+        // printf("]\n");
     }
-    // stbi_write_jpg("copia.jpg", input_image.w, input_image.h, input_image.c, stb_image, 100);
+    // printf("]\n");
 
-
-    float * result;
-    result = forward_propagation(net, input_image);
+    int * result;
+    // result = forward_propagation(net, input_image);
+    Image im_result = forward_conv(net.layers[0], input_image);
+    result = im_result.data;
 
     /*
+    for (int i = 0; i < 35; i++)
+    {
+        printf("%d \n", result[i]);
+
+    }
+    */
+
     printf("[");
-    for (int x = 0; x < input_image.w; x++){
+    for (int y = 0; y < input_image.h; y++){
         printf("[");
-        for (int y = 0; y < input_image.h; y++){
+        for (int x = 0; x < input_image.w; x++){
             printf("[");
             for (int c = 0; c < 6; c++){
-                printf("%d ", result[(x*input_image.h*input_image.c)+(y*input_image.c)+c]);
+                int index = (y*input_image.w*input_image.c) + (x*input_image.c) + c;
+                printf("%d ", result[index]);
             }
             printf("]\n");
         }
         printf("]\n");
     }
     printf("]\n");
-    */
 
-    for (int i = 0; i < 35; i++){
-        printf("o[%d] = %f\n", i, result[i]);
-    }
 
     // libera imagem
     free(input_image.data);
     free(stb_image);
     return 0;
 }
+
+
+int main(){
+    int p = 0xff000000;
+
+    int a = (p >> 24);
+
+    printf("%d %d %d", (int)a, (int)(char)p, p);
+    return 0;
+
+
+
+    int input [] = {1,1,1,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0};
+    int weights[] = {1,2,1,0,0,0,-1,-2,-1};
+    int bias[] = {0};
+
+    Layer_t l;
+    l.M = 1;
+    l.C = 1;
+    l.W = 3;
+    l.H = 3;
+    l.stride = 1;
+    l.padding = 1;
+    l.type = 0;
+    // l.bias = (int *) calloc (1, sizeof(int));
+    l.bias = bias;
+    // l.weights = (int *) calloc (9, sizeof(int));
+    l.weights = weights;
+
+    Image im;
+    im.h = 6;
+    im.w = 3;
+    im.c = 1;
+    im.data = input;
+
+    for(int h = 0; h < im.h; h++){          // linhas im
+        for(int w = 0; w < im.w; w++){      // colunas im
+            for(int k = 0; k < im.c; k++){  // canais im (or input chanel)
+                printf("%d ", get_pixel(im, w, h, k));
+            }
+            printf("\n");
+        }
+        printf("\n");
+    }
+
+    Image out = forward_conv(l, im);
+
+    printf("%d ", out.h);
+    printf("%d ", out.w);
+    printf("%d\n", out.c);
+
+    for(int h = 0; h < out.h; h++){          // linhas out
+        for(int w = 0; w < out.w; w++){      // colunas out
+            for(int k = 0; k < out.c; k++){  // canais out (or input chanel)
+                printf("%d ", get_pixel(out, w, h, k));
+            }
+            printf("\n");
+        }
+        printf("\n");
+    }
+}
+
+
