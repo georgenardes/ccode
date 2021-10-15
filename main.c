@@ -32,6 +32,7 @@ typedef struct Layer{
     int padding;
     int * weights;
     int * bias;
+    float scale_down;
     int * input; // armazenar ponteiro para entrada de cada camada visando liberacao de memoria
 } Layer_t;
 
@@ -166,11 +167,11 @@ void weight_reader(const char* file_path, Network * network){
 // y linhas
 // c canais
 int get_pixel (Image im, int x, int y, int c){
-
-    if(x >= im.w) return 0;
-    if(y >= im.h) return 0;
-    if(x < 0) return 0;
-    if(y < 0) return 0;
+    // 0 == -128
+    if(x >= im.w) return -128;
+    if(y >= im.h) return -128;
+    if(x < 0) return -128;
+    if(y < 0) return -128;
 
     assert(c >= 0);
     assert(c < im.c);
@@ -226,37 +227,24 @@ Image forward_conv (Layer_t l, Image input){
                             int pixel = get_pixel(input, x+w-l.padding, y+h-l.padding, k);
                             int peso = get_weight(l, m, w, h, k);
 
-                            // printf("%d*%d; \n", pixel, peso);
+                            printf("%d\t*\t%d \n", pixel, peso);
                             conv_o += pixel * peso;
                         }
                     }
                     // printf("\n");
                 }
                 // printf("\n");
-                /**
-                    Provavelmente aqui teria que ser
-                    aplicado "scale down" e "cast down"
-                    como a especificação do comenta.
+                conv_o += l.bias[m];    // add bias
+                float Sin = 0.003921568859368563;
+                float Speso = 0.015748031437397003;
+                float Sout = 0.04702746868133545;
+                float M = (Sin*Speso)/Sout;
+                printf("%f \n", M);
+                /// SCALE DOWN HERE
 
-                    With the final value of the int32 accumulator,
-                    there remain three things left to do: scale down
-                    to the final scale used by the 8-bit output
-                    activations, cast down to uint8 and apply the
-                    activation function to yield the final 8-bit
-                    output activation.
+                float a = ((float)conv_o) * M - 1;
 
-                    The down-scaling corresponds to multiplication
-                    by the multiplier M in equation (7). As explained
-                    in section 2.2, it is implemented as a
-                    fixed-point multiplication by a normalized
-                    multiplier M0 and a rounding bit-shift.
-                    Afterwards, we perform a saturating cast to uint8,
-                    saturating to the range [0, 255].
-
-                */
-                int o = (char)(conv_o + l.bias[m]); // add bias
-                o = (o < 0) ? 0 : o;                // RELU
-                set_pixel(out, x, y, m, o);
+                set_pixel(out, x, y, m, (int)(a));
             }
         }
     }
@@ -378,8 +366,38 @@ int * forward_propagation (Network net, Image input_tensor){
     return output_tensor;
 }
 
+int main___(){
+Image input_image;
 
-int main_()
+    unsigned char * stb_image = stbi_load("Y_74978.png", &input_image.w, &input_image.h, &input_image.c, 3);
+    input_image.c = 3;
+    if(input_image.w != 24 || input_image.h != 32){
+        printf("Incorrect image size!");
+        return 1;
+    }
+
+    // aloca memória para converter imagem para inteiro
+    input_image.data = (int *) calloc (input_image.w * input_image.h * input_image.c, sizeof(int));
+
+    // converte para int32
+    printf("[");
+    for (int y = 0; y < input_image.h; y++){
+        printf("[");
+            for (int x = 0; x < input_image.w; x++){
+            printf("[");
+            for (int c = 0; c < input_image.c; c++){
+                int index = (y*input_image.w*input_image.c) + (x*input_image.c) + c;
+                set_pixel(input_image, x, y, c, (int) stb_image[index]);
+                printf("%d ", (int)stb_image[index]);
+            }
+            printf("]\n");
+        }
+        printf("]\n");
+    }
+}
+
+
+int main__()
 {
     Network net;
     net.num_layers = LAYERS;
@@ -411,7 +429,7 @@ int main_()
             for (int c = 0; c < input_image.c; c++){
                 int index = (y*input_image.w*input_image.c) + (x*input_image.c) + c;
                 set_pixel(input_image, x, y, c, (int) stb_image[index]);
-                // set_pixel(input_image, x, y, c, 1);
+                // set_pixel(input_image, x, y, c, 128);
                 // stb_image[index] = (unsigned char) get_pixel(input_image, x, y, c);
 
                 // printf("%d ", (int)stb_image[index]);
@@ -422,12 +440,9 @@ int main_()
     }
     // printf("]\n");
 
+    /**
     int * result;
-    // result = forward_propagation(net, input_image);
-    Image im_result = forward_conv(net.layers[0], input_image);
-    result = im_result.data;
-
-    /*
+    result = forward_propagation(net, input_image);
     for (int i = 0; i < 35; i++)
     {
         printf("%d \n", result[i]);
@@ -435,6 +450,9 @@ int main_()
     }
     */
 
+    Image im_result = forward_conv(net.layers[0], input_image);
+    int * result;
+    result = im_result.data;
     printf("[");
     for (int y = 0; y < input_image.h; y++){
         printf("[");
@@ -457,19 +475,20 @@ int main_()
     return 0;
 }
 
+/*
 
+MAIN TESTE PESOS FIXOS
+
+    0b00000000 => 0
+    0b10000000 => -128
+    0b01111111 => 127
+    0b11111111 => -127
+*/
 int main(){
-    int p = 0xff000000;
-
-    int a = (p >> 24);
-
-    printf("%d %d %d", (int)a, (int)(char)p, p);
-    return 0;
-
-
-
-    int input [] = {1,1,1,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0};
-    int weights[] = {1,2,1,0,0,0,-1,-2,-1};
+    // int input [] = {1,1,1,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0};
+    // int weights[] = {1,2,1,0,0,0,-1,-2,-1};
+    int input [] = {127,127,127,-128,-128,-128,-128,-128,-128,127,127,127,-128,-128,-128,-128,-128,-128};
+    int weights[] = {64,127,64,0,0,0,-63,-127,-63};
     int bias[] = {0};
 
     Layer_t l;
@@ -491,6 +510,7 @@ int main(){
     im.c = 1;
     im.data = input;
 
+    printf("Imagem de entrada\n");
     for(int h = 0; h < im.h; h++){          // linhas im
         for(int w = 0; w < im.w; w++){      // colunas im
             for(int k = 0; k < im.c; k++){  // canais im (or input chanel)
@@ -500,7 +520,9 @@ int main(){
         }
         printf("\n");
     }
+    printf("====================================\n");
 
+    // executa rede
     Image out = forward_conv(l, im);
 
     printf("%d ", out.h);
