@@ -1,20 +1,11 @@
 # depslib dependency file v1.0
-1636131057 source:c:\users\user\desktop\projeto_tcc\crq_network\ccode\main.c
+1636130619 source:c:\users\user\desktop\projeto_tcc\crq_network\ccode\main.c
 	<stdio.h>
 	<stdlib.h>
 	<math.h>
 	<assert.h>
 	<time.h>
 	"cnn_lib.h"
-
-1636130619 c:\users\user\desktop\projeto_tcc\crq_network\ccode\cnn_lib.h
-	<stdio.h>
-	<stdlib.h>
-	<math.h>
-	<assert.h>
-	"C:\workspace\vcpkg\installed\x64-windows\include\stb_image.h"
-	"C:\workspace\vcpkg\installed\x64-windows\include\stb_image_write.h"
-	"C:\workspace\vcpkg\installed\x64-windows\include\stb_image_resize.h"
 
 1594640766 c:\workspace\vcpkg\installed\x64-windows\include\stb_image.h
 	"stb_image.h"
@@ -49,4 +40,13 @@
 	<string.h>
 	<math.h>
 	<stdlib.h>
+
+1636130619 c:\users\user\desktop\projeto_tcc\crq_network\ccode\cnn_lib.h
+	<stdio.h>
+	<stdlib.h>
+	<math.h>
+	<assert.h>
+	"C:\workspace\vcpkg\installed\x64-windows\include\stb_image.h"
+	"C:\workspace\vcpkg\installed\x64-windows\include\stb_image_write.h"
+	"C:\workspace\vcpkg\installed\x64-windows\include\stb_image_resize.h"
 
