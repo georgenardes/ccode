@@ -22,9 +22,7 @@
     The kernels weights are indexed by M(filters), H(altura), W(largura), C(canais)
 */
 
-
 typedef struct Layer{
-    int id;
     int type; // 0 conv; 1 fc; 2 pool; 3 flatt
     int M; // filtros
     int C; // canais
@@ -32,20 +30,14 @@ typedef struct Layer{
     int W; // largura
     int stride;
     int padding;
-    int * weights;
-    int * bias;
-
-    float input_scale;
-    int input_zero;
-
+    int * weights; // vetor de pesos
+    int * bias;    // vetor de bias
+    float input_scale; // escala dos valores de entrada
+    int input_zero;    // ponto zero dos valores de entrada
     float * weight_scale; // para cada canal de saida (filtro)
-
-    float output_scale;
-    float output_zero;
-
-    float * scale; // scale para camada, pre-calcculado
-
-    int * input; // armazenar ponteiro para entrada de cada camada visando liberacao de memoria
+    float output_scale;   // escala dos valores de saída
+    int output_zero;      // ponto zero do valores de saída
+    float * scale;        // scale para camada, pre-calculado
 } Layer_t;
 
 typedef struct {
@@ -59,7 +51,6 @@ typedef struct {
     int c;
     int *data;
 } Image;
-
 
 void weight_reader(const char* file_path, Network * network){
     printf("iniciando leitura de pesos\n");
@@ -192,7 +183,6 @@ void weight_reader(const char* file_path, Network * network){
             float weight_s = network->layers[layer_cnt].weight_scale[i];
             float scale = (input_s*weight_s)/ouput_s;
             network->layers[layer_cnt].scale[i] = scale;
-            // printf("%f %f %f %f\n", input_s, ouput_s, weight_s, scale);
         }
 
 
@@ -259,7 +249,6 @@ void set_pixel (Image im, int x, int y, int c, int val){
     }
 }
 
-
 int get_weight(Layer_t l, int m, int x, int y, int c){
     // return l.weights[(m*l.H*l.W*l.C)+(h*l.W*l.C)+(w*l.C)+ k];
     return l.weights[(m*l.H*l.W*l.C)+(y*l.W*l.C)+(x*l.C)+ c];
@@ -283,44 +272,53 @@ Image forward_conv (Layer_t l, Image input){
 
     out.data = (int *) calloc ((out.c*out.h*out.w), sizeof(int));
 
-    int w_index = 0;
+    // https://github.com/tensorflow/tensorflow/blob/4952f981be07b8bf508f8226f83c10cdafa3f0c4/tensorflow/contrib/lite/kernels/conv.cc#L289-L291
+    int input_offset = -l.input_zero;
+    int filter_offset = -0; // TODO. Aways 0
+    int output_offset = l.output_zero;
 
     for(int m = 0; m < out.c; m++){                     // # filters (or output channels)
         for (int y = 0; y < out.h; y++){                // linhas Ofmap
             for (int x = 0; x < out.w; x++){            // colunas Ofmap
                 // printf("pixel de saida %d %d \n", x, y);
                 int conv_o = 0;
-                for(int h = 0; h < l.H; h++){           // linhas kernel
-                    for(int w = 0; w < l.W; w++){       // colunas kernel
-                        for(int k = 0; k < l.C; k++){   // canais kernel (or input chanel)
+                for(int k = 0; k < l.C; k++){            // canais kernel (or input chanel)
+                    for(int h = 0; h < l.H; h++){           // linhas kernel
+                        for(int w = 0; w < l.W; w++){       // colunas kernel
+
+                            // https://github.com/tensorflow/tensorflow/blob/4952f981be07b8bf508f8226f83c10cdafa3f0c4/tensorflow/contrib/lite/kernels/internal/reference/reference_ops.h#L289-L295
                             int pixel = get_pixel(input, x+w-l.padding, y+h-l.padding, k);
                             int peso = get_weight(l, m, w, h, k);
-
-                            // printf("%d\t*\t%d \n", pixel, peso);
-                            conv_o += pixel * peso;
+                            conv_o += (pixel + input_offset)* (peso + filter_offset);
+                            // printf("conv_o[%d, %d, %d] += pes[%d, %d, %d] * pix[%d %d %d] || %d += %d * %d \n", y, x, m, h, w, k, h, w, k, conv_o, peso, pixel+128);
                         }
                     }
                     // printf("\n");
                 }
                 // printf("\n");
+
+                // printf("conv_o[%d, %d, %d] += bias[%d] || %d += %d\n", y, x, m, m, conv_o, l.bias[m]);
                 conv_o += l.bias[m];    // add bias
 
                 /// SCALE DOWN HERE
-                // printf("%f %d ", l.scale[m], m);
+                // https://github.com/tensorflow/tensorflow/blob/4952f981be07b8bf508f8226f83c10cdafa3f0c4/tensorflow/contrib/lite/kernels/internal/reference/reference_ops.h#L303-L309
                 int a = (int)((float)conv_o * l.scale[m]);
+                // printf("scale_down %d = %d * %f\n", a, conv_o, l.scale[m]);
 
-                // cast
-                a = a < 0 ? 0 : a;
-                a = a > 255 ? 255 : a;
+                // min max
+                a = a < 0.0 ? 0 : a;
+                a = a > 255.0 ? 255 : a;
 
-                a += l.output_zero;
+                // printf("o_fmap[%d] = %d \n", ((y*out.w*out.c) + (x*out.c) + m), a);
 
-                set_pixel(out, x, y, m, (int)(a));
+                a += output_offset;
+
+                set_pixel(out, x, y, m, a);
+                // printf("-----------------------------------------------------------\n");
             }
         }
     }
-
-    printf("conv\n");
+    printf("Conv\n");
     return out;
 }
 
@@ -331,31 +329,30 @@ Image forward_pool (Layer_t l, Image input){
     out.h = input.h / 2;
     out.data = (int *) malloc (sizeof(int) * (out.c*out.h*out.w));
 
-    int o_index = 0;
-    int w_index = 0;
-    int i_index = 0;
-
     int max_val=0;
 
-    for (int x = 0; x < out.h; x++){            // linhas Ofmap
-        for (int y = 0; y < out.w; y++){        // colunas Ofmap
-            for(int k = 0; k < out.c; k++){       // canais
-                o_index = (x*out.w*out.c) + (y*out.c) + k;
-                i_index = (x*out.w*out.c*l.stride) + (y*out.c*l.stride) + k;
-                max_val = input.data[i_index];
+    for(int k = 0; k < out.c; k++){       // canais
+        for (int y = 0; y < out.h; y++){            // linhas Ofmap
+            for (int x = 0; x < out.w; x++){        // colunas Ofmap
 
-                i_index = (x+1*out.w*out.c) + (y*out.c) + k;
-                max_val = max_val < input.data[i_index] ? input.data[i_index] : max_val;
+                // TODO: parametrizar stride
+                int pix1 = get_pixel(input, 2*x, 2*y, k);
+                int pix2 = get_pixel(input, 2*x+1, 2*y, k);
+                int pix3 = get_pixel(input, 2*x, 2*y+1, k);
+                int pix4 = get_pixel(input, 2*x+1, 2*y+1, k);
 
-                i_index = (x*out.w*out.c) + (y+1*out.c) + k;
-                max_val = max_val < input.data[i_index] ? input.data[i_index] : max_val;
 
-                i_index = (x+1*out.w*out.c) + (y*out.c) + k;
-                max_val = max_val < input.data[i_index] ? input.data[i_index] : max_val;
 
-                out.data[o_index] = max_val;
+                max_val = pix1 > pix2 ? pix1 : pix2;
+                max_val = max_val > pix3 ? max_val : pix3;
+                max_val = max_val > pix4 ? max_val : pix4;
+
+                // printf("o[%d, %d, %d] = max(i[%d:%d, %d:%d, %d]) || %d %d %d %d => %d\n", y, x, k, 2*x, 2*x+1, 2*y, 2*y+1, k, pix1+128, pix2+128, pix3+128, pix4+128, max_val+128);
+
+                set_pixel(out, x, y, k, max_val);
             }
         }
+        // printf("------------------------------------------------------------------------------\n");
     }
 
     printf("pool\n");
@@ -374,39 +371,46 @@ int * forward_fc (Layer_t l, int * input_vector){
     int * out;
     out = (int *) calloc (l.M, sizeof(int));
 
+    int input_offset = -l.input_zero;
+    int filter_offset = -0; // TODO
+    int output_offset = l.output_zero;
+
     for (int m = 0; m < l.M; m++){
+        out[m] = 0;
         for (int w = 0; w < l.W; w++){
-            out[m] += input_vector[w] * l.weights[w];
+            out[m] += (input_vector[w] + input_offset) * (l.weights[m*l.W + w] + filter_offset);
         }
+
         out[m] += l.bias[m];
 
-        out[m] = (int)(char) out[m];
+        /// scale down here
+        out[m] = (int)((float)out[m] * l.scale[0]);
+
+        out[m] += output_offset;
+
+        out[m] = (int)(char)out[m];
     }
 
     printf("fc\n");
     return out;
 }
 
-float * softmax(int* input, int size) {
+float * softmax(int* input, int num_out) {
 	int i;
 	double m, sum, constant;
-	float * result = (float*) calloc (size, sizeof(float));
-
-
+	float * result = (float*) calloc (num_out, sizeof(float));
 	m = input[0];
-	for (i = 0; i < size; ++i) {
+	for (i = 0; i < num_out; ++i) {
 		if (m < input[i]) {
 			m = input[i];
 		}
 	}
-
 	sum = 0.0;
-	for (i = 0; i < size; ++i) {
+	for (i = 0; i < num_out; ++i) {
 		sum += exp((double)input[i] - m);
 	}
-
 	constant = m + log(sum);
-	for (i = 0; i < size; ++i) {
+	for (i = 0; i < num_out; ++i) {
 		result[i] = exp(((double)input[i]) - constant);
 	}
 	return result;
@@ -436,7 +440,6 @@ int * forward_propagation (Network net, Image input_tensor){
 
     return output_tensor;
 }
-
 
 Image load_image (const char * path) {
     Image input_image;

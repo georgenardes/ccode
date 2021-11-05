@@ -2,162 +2,125 @@
 #include <stdlib.h>
 #include <math.h>
 #include <assert.h>
-
+#include <time.h>
 #include "cnn_lib.h"
 
 
 
-int main___(){
-Image input_image;
-
-    unsigned char * stb_image = stbi_load("Y_74978.png", &input_image.w, &input_image.h, &input_image.c, 3);
-    input_image.c = 3;
-    if(input_image.w != 24 || input_image.h != 32){
-        printf("Incorrect image size!");
-        return 1;
-    }
-
-    // aloca memória para converter imagem para inteiro
-    input_image.data = (int *) calloc (input_image.w * input_image.h * input_image.c, sizeof(int));
-
-    // converte para int32
-    printf("[");
-    for (int y = 0; y < input_image.h; y++){
-        printf("[");
-            for (int x = 0; x < input_image.w; x++){
-            printf("[");
-            for (int c = 0; c < input_image.c; c++){
-                int index = (y*input_image.w*input_image.c) + (x*input_image.c) + c;
-                set_pixel(input_image, x, y, c, (int) stb_image[index]);
-                printf("%d ", (int)stb_image[index]);
-            }
-            printf("]\n");
-        }
-        printf("]\n");
-    }
-}
 
 
-/*
-Main principal
-*/
-int main()
+
+float * processa_imagem(const char *weights_path, const char *img_path)
 {
     Network net;
     net.num_layers = LAYERS;
 
     // leitura dos pesos
-    weight_reader("../pesos_com_scale.txt", &net);
-    for (int i = 0 ; i < LAYERS; i++){
-        printf("type %d \t shape %d %d %d %d\n", net.layers[i].type, net.layers[i].M, net.layers[i].C, net.layers[i].H, net.layers[i].W);
-    }
+    weight_reader(weights_path, &net);
+    printf("pesos carregados!\n");
 
     // carrega imagem
-    Image input_image = load_image("Y_74978.png");
+    Image input_image = load_image(img_path);
+    printf("imagem carregada!\n");
 
-    /**
     int * result;
+    printf("iniciando processamento...\n");
+    clock_t begin = clock();
     result = forward_propagation(net, input_image);
-    for (int i = 0; i < 35; i++)
-    {
-        printf("%d \n", result[i]);
-
-    }
-    */
-
-    Image im_result = forward_conv(net.layers[0], input_image);
-    int * result;
-    result = im_result.data;
-    printf("[");
-    for (int y = 0; y < input_image.h; y++){
-        printf("[");
-        for (int x = 0; x < input_image.w; x++){
-            printf("[");
-            for (int c = 0; c < 6; c++){
-                int index = (y*input_image.w*input_image.c) + (x*input_image.c) + c;
-                printf("%d ", result[index]);
-            }
-            printf("]\n");
-        }
-        printf("]\n");
-    }
-    printf("]\n");
+    float * out_softmax = softmax(result, 35);
+    clock_t end = clock();
+    double tempo_processamento = (double)(end - begin) / CLOCKS_PER_SEC;
+    printf("fim processamento!\n");
+    printf("tempo de processamento: %f segundos\n", tempo_processamento);
 
 
     // libera imagem
     free(input_image.data);
-    return 0;
+    free(result);
+
+    return out_softmax;
 }
 
 /*
-
-MAIN TESTE PESOS FIXOS
-
-    0b00000000 => 0
-    0b10000000 => -128
-    0b01111111 => 127
-    0b11111111 => -127
+Forward individual
 */
-int main_(){
-    // int input [] = {1,1,1,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0};
-    // int weights[] = {1,2,1,0,0,0,-1,-2,-1};
-    int input [] = {-1,-1,-1,-128,-128,-128,-128,-128,-128,127,127,-1,-128,-128,-128,-128,-128,-128};
-    int weights[] = {64,127,64,0,0,0,-64,-127,-64};
-    int bias[] = {111};
+int funcao_teste(const char *weights_path, const char *img_path){
+    Network net;
+    net.num_layers = LAYERS;
 
-    Layer_t l;
-    l.M = 1;
-    l.C = 1;
-    l.W = 3;
-    l.H = 3;
-    l.stride = 1;
-    l.padding = 1;
-    l.type = 0;
-    l.bias = bias;
-    l.weights = weights;
-    l.input_scale = 0.250980406999588;
-    l.input_zero = -128;
-    float weight_scale[] = {0.015748031437397003};
-    l.weight_scale = weight_scale;
-    l.output_scale = 0.8735899925231934;
-    l.output_zero = -128;
-    float scale[] = {l.input_scale * l.weight_scale[0] / l.output_scale};
-    l.scale = scale;
+    // leitura dos pesos
+    weight_reader(weights_path, &net);
+    printf("pesos carregados!\n");
 
-    Image im;
-    im.h = 6;
-    im.w = 3;
-    im.c = 1;
-    im.data = input;
+    // carrega imagem
+    Image input_image = load_image(img_path);
+    printf("imagem carregada!\n");
 
-    printf("Imagem de entrada\n");
-    for(int h = 0; h < im.h; h++){          // linhas im
-        for(int w = 0; w < im.w; w++){      // colunas im
-            for(int k = 0; k < im.c; k++){  // canais im (or input chanel)
-                printf("%d ", get_pixel(im, w, h, k));
-            }
-            printf("\n");
-        }
-        printf("\n");
+    // processa individualmente cada camada
+    Image im_result = forward_conv(net.layers[0], input_image);
+    im_result = forward_pool(net.layers[1], im_result);
+    im_result = forward_conv(net.layers[2], im_result);
+    im_result = forward_pool(net.layers[3], im_result);
+    im_result = forward_conv(net.layers[4], im_result);
+    im_result = forward_pool(net.layers[5], im_result);
+    im_result = forward_conv(net.layers[6], im_result);
+
+    system("cls");
+    printf("\n\nConv4 output:\n");
+
+    // cria arquivo para salvar resultado contido em "im_result"
+    FILE *of;
+    of = fopen("conv4_out.txt", "w");
+
+    for (int c = 0; c < im_result.c; c++){
+        fprintf(of, "%d\t", c);
     }
-    printf("====================================\n");
-
-    // executa rede
-    Image out = forward_conv(l, im);
-
-    printf("%d ", out.h);
-    printf("%d ", out.w);
-    printf("%d\n", out.c);
-
-    for(int h = 0; h < out.h; h++){          // linhas out
-        for(int w = 0; w < out.w; w++){      // colunas out
-            for(int k = 0; k < out.c; k++){  // canais out (or input chanel)
-                printf("%d ", get_pixel(out, w, h, k));
-            }
-            printf("\n");
-        }
-        printf("\n");
+    fprintf(of, "\n");
+    for (int c = 0; c < im_result.c; c++){
+        fprintf(of, "---\t", c);
     }
+    fprintf(of, "\n");
+
+    int * result;
+    result = im_result.data;
+    printf("[");
+    for (int y = 0; y < im_result.h; y++){
+        printf("[");
+        for (int x = 0; x < im_result.w; x++){
+            printf("[");
+            for (int c = 0; c < im_result.c; c++){
+                int pixel = get_pixel(im_result, x, y, c) + 128;
+
+                fprintf(of, "%d\t", pixel);
+                printf("%d ", pixel);
+            }
+            fprintf(of, "\n");
+            printf("]\n");
+        }
+        fprintf(of, "\n");
+        printf("]\n");
+    }
+    printf("]\n");
+
+    fclose(of);
+
+    // libera imagem
+    free(input_image.data);
+    return 0;
+
+
 }
 
 
+int main () {
+        float * out = processa_imagem("../pesos_com_scale.txt", "Y_74978.png"); // "A_21472.png"
+    for (int i = 0; i < 35; i++)
+    {
+        printf("[%f]\n", out[i]);
+    }
+/*
+
+    funcao_teste("../pesos_com_scale.txt", "Y_74978.png");
+*/
+    return 0;
+}
