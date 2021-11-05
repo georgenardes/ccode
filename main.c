@@ -70,7 +70,7 @@ int funcao_teste(const char *weights_path, const char *img_path){
 
     // cria arquivo para salvar resultado contido em "im_result"
     FILE *of;
-    of = fopen("conv4_out.txt", "w");
+    of = fopen("output_files/conv4_out.txt", "w");
 
     for (int c = 0; c < im_result.c; c++){
         fprintf(of, "%d\t", c);
@@ -113,14 +113,14 @@ int funcao_teste(const char *weights_path, const char *img_path){
 
 
 int main () {
-        float * out = processa_imagem("../pesos_com_scale.txt", "Y_74978.png"); // "A_21472.png"
+    float * out = processa_imagem("pesos_com_scale.txt", "test_images/Y_74978.png"); // "test_images/A_21472.png"
     for (int i = 0; i < 35; i++)
     {
         printf("[%f]\n", out[i]);
     }
 /*
 
-    funcao_teste("../pesos_com_scale.txt", "Y_74978.png");
+    funcao_teste("pesos_com_scale.txt", "test_images/Y_74978.png");
 */
     return 0;
 }
