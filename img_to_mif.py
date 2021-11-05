@@ -1,5 +1,5 @@
 '''
-Este programa converte uma imagem 64x64 
+Este programa converte uma imagem
 em RGB para um arquivo .mif
 '''
 import cv2 as cv
@@ -30,46 +30,25 @@ def rodape():
     print(str_ret)
     return str_ret
 
-'''
-# inicio     
-im = cv.imread("Y_74978.png")
-gray = cv.cvtColor(im, cv.COLOR_BGR2GRAY)
-index = 0
 
-with open("input_chanel.mif", "w") as mif:
-    mif.writelines(cabecalho())
-    for linha in gray:
-        for pixel in linha:
-            bin_value = bin(pixel).
-                        replace("0b", "")
-            bin_value = bin_value.
-                            zfill(WIDTH)           
-            mif.writelines(
-                    str(DEPTH-index-1) +
-                    ": " + bin_value +
-                    "; \n")
-            print(DEPTH-index-1,
-                    ": ", bin_value)
-            index += 1
-    
-    mif.writelines(rodape())
-'''
 im = cv.imread("Y_74978.png")
 im_rgb = cv.cvtColor(im, cv.COLOR_BGR2RGB)
-index = 0
+imw = im_rgb.shape[1]       # largura
+imh = im_rgb.shape[0]       # altura
+num_pix_chanel = imh * imw
 
+
+index = 0
 with open("input_chanel_R.mif", "w") as mif:    
     mif.writelines(cabecalho()) 
 
-    for i in range(256):
-        mif.writelines(str(DEPTH-index-1) +
-        ": 00000000; \n")
+    for i in range(DEPTH, num_pix_chanel, -1):
+        mif.writelines(str(DEPTH-index-1) + ": 00000000; \n")
         index += 1
 
-        
-    for linha in im_rgb:
-        for coluna in linha:
-            pixel = coluna[0]
+    for linha in range(imh-1, -1, -1):
+        for coluna in range(imw-1, -1, -1):
+            pixel = im_rgb[linha, coluna, 0]
             bin_value = bin(pixel).replace("0b", "")
             bin_value = bin_value.zfill(WIDTH)           
             mif.writelines(
@@ -83,16 +62,15 @@ with open("input_chanel_R.mif", "w") as mif:
 
 index = 0
 with open("input_chanel_G.mif", "w") as mif:   
-    mif.writelines(cabecalho()) 
-    
-    for i in range(256):
-        mif.writelines(str(DEPTH-index-1) +
-        ": 00000000; \n")
+    mif.writelines(cabecalho())
+
+    for i in range(DEPTH, num_pix_chanel, -1):
+        mif.writelines(str(DEPTH - index - 1) + ": 00000000; \n")
         index += 1
 
-    for linha in im_rgb:
-        for coluna in linha:
-            pixel = coluna[1]
+    for linha in range(imh - 1, -1, -1):
+        for coluna in range(imw - 1, -1, -1):
+            pixel = im_rgb[linha, coluna, 1]
             bin_value = bin(pixel).replace("0b", "")
             bin_value = bin_value.zfill(WIDTH)           
             mif.writelines(
@@ -107,15 +85,14 @@ with open("input_chanel_G.mif", "w") as mif:
 index = 0
 with open("input_chanel_B.mif", "w") as mif:    
     mif.writelines(cabecalho())
-    
-    for i in range(256):
-        mif.writelines(str(DEPTH-index-1) +
-        ": 00000000; \n")
+
+    for i in range(DEPTH, num_pix_chanel, -1):
+        mif.writelines(str(DEPTH - index - 1) + ": 00000000; \n")
         index += 1
-        
-    for linha in im_rgb:
-        for coluna in linha:
-            pixel = coluna[2]
+
+    for linha in range(imh - 1, -1, -1):
+        for coluna in range(imw - 1, -1, -1):
+            pixel = im_rgb[linha, coluna, 2]
             bin_value = bin(pixel).replace("0b", "")
             bin_value = bin_value.zfill(WIDTH)           
             mif.writelines(
@@ -126,4 +103,10 @@ with open("input_chanel_B.mif", "w") as mif:
             index += 1
     
     mif.writelines(rodape())
- 
+
+
+cv.imshow("Red", im_rgb[..., 0])
+cv.imshow("Green", im_rgb[..., 1])
+cv.imshow("Blue", im_rgb[..., 2])
+
+cv.waitKey(0)
