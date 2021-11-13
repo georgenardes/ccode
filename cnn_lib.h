@@ -23,17 +23,17 @@
 */
 
 typedef struct Layer{
-    int type; // 0 conv; 1 fc; 2 pool; 3 flatt
-    int M; // filtros
-    int C; // canais
-    int H; // altura
-    int W; // largura
-    int stride;
-    int padding;
-    int * weights; // vetor de pesos
-    int * bias;    // vetor de bias
-    float input_scale; // escala dos valores de entrada
-    int input_zero;    // ponto zero dos valores de entrada
+    int type;             // 0 conv; 1 fc; 2 pool; 3 flatt
+    int M;                // filtros
+    int C;                // canais
+    int H;                // altura
+    int W;                // largura
+    int stride;		      // numero de stride
+    int padding;	      // se há borda
+    int * weights;        // vetor de pesos
+    int * bias;           // vetor de bias
+    float input_scale;    // escala dos valores de entrada
+    int input_zero;       // ponto zero dos valores de entrada
     float * weight_scale; // para cada canal de saida (filtro)
     float output_scale;   // escala dos valores de saída
     int output_zero;      // ponto zero do valores de saída
@@ -52,6 +52,7 @@ typedef struct {
     int *data;
 } Image;
 
+// carrega os parametros da CNN
 void weight_reader(const char* file_path, Network * network){
     printf("iniciando leitura de pesos\n");
     FILE *fp;
@@ -256,6 +257,8 @@ int get_weight(Layer_t l, int m, int x, int y, int c){
 
 
 /// ==================================== OPERATIONS
+
+// processa camada convolucional
 Image forward_conv (Layer_t l, Image input){
     Image out;
     out.c = l.M;    // # filters
@@ -322,6 +325,7 @@ Image forward_conv (Layer_t l, Image input){
     return out;
 }
 
+// processa camada pool
 Image forward_pool (Layer_t l, Image input){
     Image out;
     out.c = input.c;    // # filters
@@ -361,12 +365,15 @@ Image forward_pool (Layer_t l, Image input){
 
 }
 
+
+// processa camada flatten
 int * forward_flatten (Layer_t l, Image input_image){
     printf("flatten ");
     printf("%d %d %d = %d\n", input_image.w,input_image.h, input_image.c, (input_image.w*input_image.h*input_image.c));
     return input_image.data;
 }
 
+// processa camada FC
 int * forward_fc (Layer_t l, int * input_vector){
     int * out;
     out = (int *) calloc (l.M, sizeof(int));
@@ -395,6 +402,8 @@ int * forward_fc (Layer_t l, int * input_vector){
     return out;
 }
 
+
+// processa camada softmax
 float * softmax(int* input, int num_out) {
 	int i;
 	double m, sum, constant;
@@ -416,6 +425,8 @@ float * softmax(int* input, int num_out) {
 	return result;
 }
 
+
+// processa todas as camadas da CNN
 int * forward_propagation (Network net, Image input_tensor){
     Image fmap = input_tensor;
     int * out_flatten;
@@ -441,6 +452,7 @@ int * forward_propagation (Network net, Image input_tensor){
     return output_tensor;
 }
 
+// carrega imagem
 Image load_image (const char * path) {
     Image input_image;
     unsigned char * stb_image = stbi_load(path, &input_image.w, &input_image.h, &input_image.c, 3);
@@ -467,6 +479,32 @@ Image load_image (const char * path) {
     return input_image;
 }
 
+
+void save_img_channels (const char * path, Image im) {
+    char img_path[255];
+
+
+    // percorre os canais da imagem
+    for (int c = 0; c < im.c; c++) {
+        sprintf(img_path, "%s_canal_%d.png", path, c);
+
+        unsigned char * img_data = (unsigned char*) malloc (im.h*im.w);
+        for (int y = 0; y < im.h; y++){
+            for (int x = 0; x < im.w; x++){
+                int index = (y*im.w) + x;
+                unsigned char pixel = get_pixel(im, x, y, c) + 128;
+
+                img_data[index] = pixel;
+
+                printf("%d ", pixel);
+            }
+            printf("\n");
+        }
+        printf("\n");
+        stbi_write_png(img_path, im.w, im.h, 1, img_data, 0);
+    }
+
+}
 
 
 #endif // CNN_LIB_H_INCLUDED
